@@ -1,24 +1,28 @@
 CC = gcc
 CFLAGS = -g -Wall -Wextra -std=c18
 BIN = clox
-OBJS = main.o chunk.o debug.o memory.o value.o
-DEPS = $(OBJS:%.o=%.d)
+SRC = $(wildcard *.c)
+OBJ = $(patsubst %.c, %.o, $(SRC))
+DEP = $(patsubst %.c, %.d, $(SRC))
 
-# Default all target
-.PHONY : all
-all : $(OBJS)
-	$(CC) $(CFLAGS) -o $(BIN) $?
+.PHONY : all tags clean
+
+# (Default) all target
+all : $(OBJ)
+	$(CC) $(CFLAGS) -o $(BIN) $^
 
 # Build header dependency info w/ object files
--include $(DEPS)
-%.o : %.c
-	$(CC) $(CFLAGS) -MMD -c $<
+-include $(DEP)
+%.o : %.c %.d
+	$(CC) $(CFLAGS) -c -o $@ $<
 
-.PHONY : tags
-tags : *.c *.h
-	ctags $?
+%.d : %.c
+	$(CC) -MM -MF $@ $?
 
-# Clean target
-.PHONY : clean
+# tags target
+tags : $(SRC) $(wildcard *.h)
+	ctags -R .
+
+# clean target
 clean :
-	rm -rf $(BIN) $(OBJS) $(DEPS)
+	rm -rf $(BIN) $(OBJ) $(DEP)
