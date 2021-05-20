@@ -14,6 +14,10 @@ all : $(OBJS)
 %.o : %.c
 	$(CC) $(CFLAGS) -MMD -c $<
 
+.PHONY : tags
+tags : *.c *.h
+	ctags $?
+
 # Clean target
 .PHONY : clean
 clean :
