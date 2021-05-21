@@ -1,28 +1,68 @@
-CC = gcc
-CFLAGS = -g -Wall -Wextra -std=c18
-BIN = clox
-SRC = $(wildcard *.c)
+
+# Define and export variables
+
+CC           = gcc
+DIST_FLAGS   = -g0 -O2
+DEBUG_FLAGS  = -ggdb -Og
+COMMON_FLAGS = -march=native -pipe -std=c17 -Wall -Wextra
+CFLAGS       = $(COMMON_FLAGS) $(DEBUG_FLAGS)
+
+export CC
+export CFLAGS
+
+BIN      = clox
+SRCDIR   = src
+BINDIR   = /usr/local/bin
+DISTFILE = $(BIN).tar.gz
+
+SRC = $(wildcard $(SRCDIR)/*.c)
 OBJ = $(patsubst %.c, %.o, $(SRC))
-DEP = $(patsubst %.c, %.d, $(SRC))
 
-.PHONY : all tags clean
+.PHONY : all clean clobber dist install install-strip tags uninstall
 
-# (Default) all target
-all : $(OBJ)
-	$(CC) $(CFLAGS) -o $(BIN) $^
+# Default target
 
-# Build header dependency info w/ object files
--include $(DEP)
-%.o : %.c %.d
-	$(CC) $(CFLAGS) -c -o $@ $<
+all : $(BIN)
 
-%.d : %.c
-	$(CC) -MM -MF $@ $?
+$(BIN) : $(OBJ)
+	$(CC) $(CFLAGS) -o $@ $^
 
-# tags target
-tags : $(SRC) $(wildcard *.h)
-	ctags -R .
+$(SRCDIR)/%.o : $(SRCDIR)/%.c
+	$(MAKE) -C $(SRCDIR) -f src.mk
 
-# clean target
+# Remove binaries and object and dependency files
+
 clean :
-	rm -rf $(BIN) $(OBJ) $(DEP)
+	$(MAKE) -C $(SRCDIR) -f src.mk clean
+	rm -rf $(BIN)
+
+# Remove dist tarball and tags
+
+clobber : clean
+	rm -f $(DISTFILE) tags
+
+# Pack source and makefile into tarball
+
+dist :
+	rm -f $(DEP)
+	tar -czvf $(DISTFILE) $(SRCDIR) Makefile
+
+# Install binar(y|ies)
+
+install : all
+	cp $(BIN) $(BINDIR)
+
+# Install and strip binar(y|ies)
+
+install-strip : install
+	strip $(BINDIR)/$(BIN)
+
+# Generate tags for source and tests
+
+tags :
+	ctags -R $(SRCDIR)
+
+# Uninstall binar(y|ies)
+
+uninstall :
+	rm -f $(BINDIR)/$(BIN)
