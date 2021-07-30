@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include <stdio.h>
 
 #include "common.h"
@@ -13,6 +14,17 @@ static void resetStack() {
     vm.capacity = 0;
     vm.stack = NULL;
     vm.stackTop = vm.stack;
+}
+
+static void runtimeError(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    va_end(args);
+    fputs("\n", stderr);
+    int line = getLine(vm.chunk, vm.ip - vm.chunk->code - 1);
+    fprintf(stderr, "[line %d] in script\n", line);
+    resetStack();
 }
 
 static void freeStack() {
@@ -39,17 +51,17 @@ void push(Value value) {
     vm.count++;
 }
 
-void setTop(Value value) {
-    *(vm.stackTop - 1) = value;
-}
-
-Value peek() {
-    return *(vm.stackTop - 1);
-}
-
 Value pop() {
     vm.stackTop--;
     return *vm.stackTop;
+}
+
+static Value peek(int distance) {
+    return vm.stackTop[-1 - distance];
+}
+
+static bool isFalsey(Value value) {
+    return IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value));
 }
 
 #pragma GCC diagnostic push
@@ -60,10 +72,15 @@ static InterpretResult run() {
 #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
 #define READ_CONSTANT_LONG() \
     (vm.chunk->constants.values[(READ_BYTE() << 16) | (READ_BYTE() << 8)  | READ_BYTE()])
-#define BINARY_OP(op) \
+#define BINARY_OP(valueType, op) \
     do { \
-        double b = pop(); \
-        setTop(peek() op b); \
+        if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
+            runtimeError("Operands must be numbers."); \
+            return INTERPRET_RUNTIME_ERROR; \
+        } \
+        double b = AS_NUMBER(pop()); \
+        double a = AS_NUMBER(pop()); \
+        push(valueType(a op b)); \
     } while (false)
 
     for (;;) {
@@ -84,15 +101,35 @@ static InterpretResult run() {
                 push(READ_CONSTANT());
                 break;
             }
+            case OP_NIL: push(NIL_VAL); break;
+            case OP_TRUE: push(BOOL_VAL(true)); break;
+            case OP_FALSE: push(BOOL_VAL(false)); break;
+            case OP_EQUAL: {
+                Value b = pop();
+                Value a = pop();
+                push(BOOL_VAL(valuesEqual(a, b)));
+                break;
+            }
             case OP_CONSTANT_LONG: {
                 push(READ_CONSTANT_LONG());
                 break;
             }
-            case OP_ADD:        BINARY_OP(+); break;
-            case OP_SUBTRACT:   BINARY_OP(-); break;
-            case OP_MULTIPLY:   BINARY_OP(*); break;
-            case OP_DIVIDE:     BINARY_OP(/); break;
-            case OP_NEGATE:     setTop(-peek()); break;
+            case OP_GREATER:    BINARY_OP(BOOL_VAL, >); break;
+            case OP_LESS:       BINARY_OP(BOOL_VAL, <); break;
+            case OP_ADD:        BINARY_OP(NUMBER_VAL, +); break;
+            case OP_SUBTRACT:   BINARY_OP(NUMBER_VAL, -); break;
+            case OP_MULTIPLY:   BINARY_OP(NUMBER_VAL, *); break;
+            case OP_DIVIDE:     BINARY_OP(NUMBER_VAL, /); break;
+            case OP_NOT:
+                push(BOOL_VAL(isFalsey(pop())));
+                break;
+            case OP_NEGATE:
+                if (!IS_NUMBER(peek(0))) {
+                    runtimeError("Operand must be a number.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                push(NUMBER_VAL(-(AS_NUMBER(pop()))));
+                break;
             case OP_RETURN: {
                 printValue(pop());
                 printf("\n");
