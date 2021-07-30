@@ -43,8 +43,7 @@ clobber : clean
 
 # Pack source and makefile into tarball
 
-dist :
-	rm -f $(DEP)
+dist : clean
 	tar -czvf $(DISTFILE) $(SRCDIR) Makefile
 
 # Install binar(y|ies)
